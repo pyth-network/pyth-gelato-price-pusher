@@ -1,6 +1,7 @@
 import { Octokit } from "octokit";
 import YAML from "yaml";
 import { EvmPriceServiceConnection, Price } from "@pythnetwork/pyth-evm-js";
+import { Contract } from "ethers";
 
 export interface PythConfigStorage {
   timestamp: number;
@@ -68,15 +69,15 @@ export async function fetchPythConfigIfNecessary(
     };
     const pythConfigStorageValue = JSON.stringify(pythConfigStorage);
     if (pythConfig.debug) {
-      console.debug(
-        `storing fetched pythConfigStorageValue: ${pythConfigStorageValue}`
-      );
+      // console.debug(
+      //   `storing fetched pythConfigStorageValue: ${pythConfigStorageValue}`
+      // );
     }
     await storage.set("pythConfig", pythConfigStorageValue);
   } else {
     pythConfig = pythConfigStorage.pythConfig;
     if (pythConfig.debug) {
-      console.debug("using pythConfig from storage");
+      // console.debug("using pythConfig from storage");
     }
   }
   return pythConfig;
@@ -92,7 +93,7 @@ export async function getCurrentPrices(
     return undefined;
   }
   if (debug) {
-    console.debug(`latestPriceFeeds: ${JSON.stringify(latestPriceFeeds)}`);
+    // console.debug(`latestPriceFeeds: ${JSON.stringify(latestPriceFeeds)}`);
   }
 
   return latestPriceFeeds
@@ -111,7 +112,7 @@ export async function getCurrentPrices(
     }, new Map<string, Price>());
 }
 
-export async function getLastPrices(
+export async function getLastStoredPrices(
   priceIds: string[],
   storage: Web3Storage
 ): Promise<Map<string, Price>> {
@@ -129,4 +130,16 @@ export async function getLastPrices(
       acc.set(priceInfo.priceId, price);
       return acc;
     }, new Map<string, Price>());
+}
+
+export async function getLastOnChainPrices(
+  priceIds: string[],
+  pythContract: Contract
+): Promise<Map<string, Price>> {
+  const prices = new Map<string, Price>();
+  for (const priceId of priceIds) {
+    const price = await pythContract.getPriceUnsafe(priceId);
+    prices.set(priceId, price);
+  }
+  return prices;
 }

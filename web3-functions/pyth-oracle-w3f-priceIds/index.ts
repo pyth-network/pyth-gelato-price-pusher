@@ -12,6 +12,7 @@ import {
   PythConfig,
   fetchPythConfigIfNecessary,
   getCurrentPrices,
+  getLastOnChainPrices,
   getLastPrices,
 } from "./pythUtils";
 
@@ -38,7 +39,7 @@ Web3Function.onRun(async (context: Web3FunctionContext) => {
   const debug = pythConfig.debug;
 
   if (debug) {
-    console.debug(`pythConfig: ${JSON.stringify(pythConfig)}`);
+    // console.debug(`pythConfig: ${JSON.stringify(pythConfig)}`);
   }
 
   const {
@@ -58,7 +59,7 @@ Web3Function.onRun(async (context: Web3FunctionContext) => {
   // Get Pyth price data
   const connection = new EvmPriceServiceConnection(priceServiceEndpoint);
   if (debug) {
-    console.debug(`fetching current prices for priceIds: ${priceIds}`);
+    // console.debug(`fetching current prices for priceIds: ${priceIds}`);
   }
   const currentPrices = await getCurrentPrices(priceIds, connection, debug);
   if (currentPrices === undefined) {
@@ -76,52 +77,105 @@ Web3Function.onRun(async (context: Web3FunctionContext) => {
     return { canExec: false, message: "Not all prices available" };
   }
 
-  const lastPrices = await getLastPrices(priceIds, storage);
+  const lastPrices = await getLastOnChainPrices(priceIds, pythContract);
   if (debug) {
-    console.debug(
-      `
-        currentPrices: ${JSON.stringify([...currentPrices.entries()])}
-        lastPrices: ${JSON.stringify([...lastPrices.entries()])}
-      `
-    );
+    // console.debug(
+    //   `
+    //     currentPrices: ${JSON.stringify([...currentPrices.entries()])}
+    //     lastPrices: ${JSON.stringify([...lastPrices.entries()])}
+    //   `
+    // );
   }
 
+    // Example simulation results for priceFeedNeedsUpdate:
+
+  // Scenario 1: Price deviation exceeds threshold
+  // Input:
+  //   lastPrice: { price: "1000000", expo: -6, publishTime: 1677721600 }  
+  //   currentPrice: { price: "1200000", expo: -6, publishTime: 1677725200 }
+  //   deviationThresholdBps: 100 (1%)
+  // Output:
+  //   priceDiff: 200000n (20%)
+  //   priceExceedsDiff: true
+  //   priceIsStale: false
+  //   returns: true
+
+  // Scenario 2: Price is stale
+  // Input:  
+  //   priceId: "0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b"
+  //   lastPrice: { price: "30000000000", expo: -9, publishTime: 1677721600 }
+  //   currentPrice: { price: "30100000000", expo: -9, publishTime: 1677728800 } 
+  //   validTimePeriodSeconds: 3600 (1 hour)
+  // Output:
+  //   priceDiff: 3333n (0.33%)
+  //   priceExceedsDiff: false  
+  //   priceIsStale: true
+  //   returns: true
+
+  // Scenario 3: No update needed
+  // Input:
+  //   priceId: "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43"
+  //   lastPrice: { price: "50000000", expo: -6, publishTime: 1677721600 }
+  //   currentPrice: { price: "50200000", expo: -6, publishTime: 1677723400 }
+  // Output:  
+  //   priceDiff: 4000n (0.4%)
+  //   priceExceedsDiff: false
+  //   priceIsStale: false
+  //   returns: false
+
   const priceFeedNeedsUpdate = (priceId: string): boolean => {
-    const lastPrice = lastPrices.get(priceId)!;
-    const currentPrice = currentPrices.get(priceId)!;
+    const lastPrice = lastPrices.get(priceId);
+    const currentPrice = currentPrices.get(priceId);
+    // If the price is not available on chain, we need to update it
+    if (!lastPrice || !currentPrice) return true;
     let priceDiff = BigInt(lastPrice.price) - BigInt(currentPrice.price);
     priceDiff = priceDiff < 0 ? -priceDiff : priceDiff;
-    priceDiff *= BigInt(10000); // bps
     priceDiff /= BigInt(lastPrice.price);
-    const priceExceedsDiff = priceDiff >= deviationThresholdBps;
+    const priceExceedsDiff = priceDiff >= deviationThresholdBps / 10000;
     const priceIsStale =
       currentPrice.publishTime - lastPrice.publishTime > validTimePeriodSeconds;
-    if (debug) {
-      console.debug(`
-        priceId: ${priceId}
-        priceDiff: ${priceDiff}
-        priceExceedsDiff: ${priceExceedsDiff}
-        priceIsStale: ${priceIsStale}
-      `);
+    if (priceIsStale || priceExceedsDiff) {
+      if (debug) {
+        console.debug(`
+          priceId: ${priceId}
+          priceDiff: ${priceDiff}
+          priceExceedsDiff: ${priceExceedsDiff}
+          priceIsStale: ${priceIsStale}
+          lastPrice: ${lastPrice.price}
+          currentPrice: ${currentPrice.price}
+          lastPriceTime: ${lastPrice.publishTime}
+          currentPriceTime: ${currentPrice.publishTime}
+        `);
+      }
+      return true;
     }
-    return priceExceedsDiff || priceIsStale;
+    return false;
   };
 
-  const priceIdsToUpdate = [...currentPrices.keys()].filter((priceId) => {
-    return (
-      lastPrices.get(priceId) === undefined || priceFeedNeedsUpdate(priceId)
-    );
-  });
+  
+  let priceIdsToUpdate: string[] = [];
+  for (const priceId of currentPrices.keys()) {
+    if (
+      lastPrices.get(priceId) === undefined ||
+      priceFeedNeedsUpdate(priceId)
+    ) {
+      priceIdsToUpdate = [...currentPrices.keys()];
+      break;
+    }
+  }
 
   if (priceIdsToUpdate.length > 0) {
-    await Promise.all(
-      priceIdsToUpdate.map(async (priceId) => {
-        const storageValue = JSON.stringify(
-          currentPrices.get(priceId)?.toJson()
-        );
-        await storage.set(priceId, storageValue);
-      })
-    );
+    if (debug) {
+      console.debug(`n of PriceIds: `, priceIdsToUpdate.length);
+    }
+    // await Promise.all(
+    //   priceIdsToUpdate.map(async (priceId) => {
+    //     const storageValue = JSON.stringify(
+    //       currentPrices.get(priceId)?.toJson()
+    //     );
+    //     await storage.set(priceId, storageValue);
+    //   })
+    // );
 
     const publishTimes = priceIdsToUpdate.map(
       (priceId) => currentPrices.get(priceId)!.publishTime
