@@ -112,34 +112,22 @@ export async function getCurrentPrices(
     }, new Map<string, Price>());
 }
 
-export async function getLastStoredPrices(
-  priceIds: string[],
-  storage: Web3Storage
-): Promise<Map<string, Price>> {
-  return (
-    await Promise.all(
-      priceIds.map(async (priceId) => {
-        const storedValue = await storage.get(priceId);
-        return { priceId, storedValue };
-      })
-    )
-  )
-    .filter((p) => p.storedValue !== undefined)
-    .reduce((acc, priceInfo) => {
-      const price = Price.fromJson(JSON.parse(priceInfo.storedValue!));
-      acc.set(priceInfo.priceId, price);
-      return acc;
-    }, new Map<string, Price>());
-}
-
 export async function getLastOnChainPrices(
   priceIds: string[],
   pythContract: Contract
 ): Promise<Map<string, Price>> {
   const prices = new Map<string, Price>();
   for (const priceId of priceIds) {
-    const price = await pythContract.getPriceUnsafe(priceId);
-    prices.set(priceId, price);
+    const priceData = await pythContract.getPriceUnsafe(priceId);
+    // console.debug(`priceData: ${priceData}`);
+    const priceWrite = new Price({
+      price: priceData.price.toString(),
+      conf: priceData.conf.toString(),
+      expo: priceData.expo,
+      publishTime: priceData.publishTime.toString(),
+    });
+    // console.debug(`priceWrite: ${JSON.stringify(priceWrite)}`);
+    prices.set(priceId, priceWrite);
   }
   return prices;
 }

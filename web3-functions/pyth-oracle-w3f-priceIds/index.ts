@@ -13,8 +13,11 @@ import {
   fetchPythConfigIfNecessary,
   getCurrentPrices,
   getLastOnChainPrices,
-  getLastPrices,
 } from "./pythUtils";
+
+/*
+We limited the debug logs. At the time of writing, web3 functions have a limit of 1000 characters in their debug logs.
+*/
 
 Web3Function.onRun(async (context: Web3FunctionContext) => {
   const { storage, secrets, multiChainProvider } = context;
@@ -22,7 +25,6 @@ Web3Function.onRun(async (context: Web3FunctionContext) => {
   const provider = multiChainProvider.default();
 
   // Refresh/retrieve config from storage
-
   const gistId = (await secrets.get("GIST_ID")) as string;
 
   let pythConfig: PythConfig | undefined;
@@ -38,9 +40,9 @@ Web3Function.onRun(async (context: Web3FunctionContext) => {
 
   const debug = pythConfig.debug;
 
-  if (debug) {
-    // console.debug(`pythConfig: ${JSON.stringify(pythConfig)}`);
-  }
+  // if (debug) {
+  //   console.debug(`pythConfig: ${JSON.stringify(pythConfig)}`);
+  // }
 
   const {
     pythNetworkAddress,
@@ -58,9 +60,9 @@ Web3Function.onRun(async (context: Web3FunctionContext) => {
 
   // Get Pyth price data
   const connection = new EvmPriceServiceConnection(priceServiceEndpoint);
-  if (debug) {
-    // console.debug(`fetching current prices for priceIds: ${priceIds}`);
-  }
+  // if (debug) {
+  //   console.debug(`fetching current prices for priceIds: ${priceIds}`);
+  // }
   const currentPrices = await getCurrentPrices(priceIds, connection, debug);
   if (currentPrices === undefined) {
     return {
@@ -78,16 +80,16 @@ Web3Function.onRun(async (context: Web3FunctionContext) => {
   }
 
   const lastPrices = await getLastOnChainPrices(priceIds, pythContract);
-  if (debug) {
-    // console.debug(
-    //   `
-    //     currentPrices: ${JSON.stringify([...currentPrices.entries()])}
-    //     lastPrices: ${JSON.stringify([...lastPrices.entries()])}
-    //   `
-    // );
-  }
+  // if (debug) {
+  //   console.debug(
+  //     `
+  //       currentPrices: ${JSON.stringify([...currentPrices.entries()])}
+  //       lastPrices: ${JSON.stringify([...lastPrices.entries()])}
+  //     `
+  //   );
+  // }
 
-    // Example simulation results for priceFeedNeedsUpdate:
+  // Example simulation results for priceFeedNeedsUpdate:
 
   // Scenario 1: Price deviation exceeds threshold
   // Input:
@@ -125,6 +127,7 @@ Web3Function.onRun(async (context: Web3FunctionContext) => {
 
   const priceFeedNeedsUpdate = (priceId: string): boolean => {
     const lastPrice = lastPrices.get(priceId);
+    // console.debug(`lastPrice: ${JSON.stringify(lastPrice)}`);
     const currentPrice = currentPrices.get(priceId);
     // If the price is not available on chain, we need to update it
     if (!lastPrice || !currentPrice) return true;
@@ -152,7 +155,6 @@ Web3Function.onRun(async (context: Web3FunctionContext) => {
     return false;
   };
 
-  
   let priceIdsToUpdate: string[] = [];
   for (const priceId of currentPrices.keys()) {
     if (
@@ -165,17 +167,9 @@ Web3Function.onRun(async (context: Web3FunctionContext) => {
   }
 
   if (priceIdsToUpdate.length > 0) {
-    if (debug) {
-      console.debug(`n of PriceIds: `, priceIdsToUpdate.length);
-    }
-    // await Promise.all(
-    //   priceIdsToUpdate.map(async (priceId) => {
-    //     const storageValue = JSON.stringify(
-    //       currentPrices.get(priceId)?.toJson()
-    //     );
-    //     await storage.set(priceId, storageValue);
-    //   })
-    // );
+    // if (debug) {
+    //   console.debug(`n of PriceIds: `, priceIdsToUpdate.length);
+    // }
 
     const publishTimes = priceIdsToUpdate.map(
       (priceId) => currentPrices.get(priceId)!.publishTime
