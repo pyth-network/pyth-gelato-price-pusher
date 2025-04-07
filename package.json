@@ -2,7 +2,7 @@
   "name": "pyth-gelato-price-pusher",
   "version": "1.0.0",
   "description": "Gelato Web3 Functions for Pyth Price Pusher",
-  "repository": "https://github.com/pythnetwork/pyth-gelato-price-pusher",
+  "repository": "https://github.com/pyth-network/pyth-gelato-price-pusher",
   "private": false,
   "scripts": {
     "build": "yarn clean && yarn install && yarn compile && npx tsc",
