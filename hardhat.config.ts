@@ -68,7 +68,7 @@ const config: HardhatUserConfig = {
     base: {
       accounts: PK ? [PK] : [],
       chainId: 8453,
-      url: `https://base-mainnet.g.alchemy.com/v2/${BLAST_API_KEY}`,
+      url: `https://mainnet.base.org`,
     },
     blastSepolia :{
       accounts: PK ? [PK] : [],
